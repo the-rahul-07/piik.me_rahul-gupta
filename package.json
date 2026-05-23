@@ -30,6 +30,7 @@
     "globe.gl": "^2.45.0",
     "isomorphic-dompurify": "^2.35.0",
     "nanoid": "^3.3.7",
+    "node-fetch": "^3.3.2",
     "qr-code-styling": "^1.9.2",
     "qrcode": "^1.5.4",
     "socket.io": "^4.6.1",
