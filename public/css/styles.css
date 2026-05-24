@@ -1533,11 +1533,12 @@ html[data-theme="light"] .filter-select:hover {
 }
 
 .card-header {
-    padding: 20px 24px;
+    padding: 20px 26px;
     border-bottom: 1px solid rgba(139, 157, 184, 0.1);
     display: flex;
+    min-height: 72px;
     align-items: center;
-    gap: 10px;
+    justify-content: space-between;
 }
 
 .card-header h3 {
@@ -2190,6 +2191,8 @@ textarea.form-input {
         min-width: 180px;
         max-width: 200px;
     }
+    
+    
 
     /* Page Header */
     .page-header {
@@ -2499,6 +2502,15 @@ textarea.form-input {
     .stat-label {
         font-size: 12px;
     }
+    .charts-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .chart-card {
+    padding: 16px;
+    min-width: 0;
+  }
 
     .stat-icon {
         width: 40px;

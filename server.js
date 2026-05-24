@@ -11,9 +11,9 @@ require('dotenv').config();
 
 // Initialize Firebase Admin
 let db = null;
-fix/firebase-crash
+
 let auth = null;
-main
+
 try {
   admin.initializeApp({
     credential: admin.credential.cert({
@@ -27,9 +27,9 @@ fix/firebase-crash
   db = admin.firestore();
   auth = admin.auth();
 
-=======
+
   db = admin.firestore();
-main
+
   console.log('✅ Firebase Admin initialized');
 } catch (error) {
   console.log('⚠️ Firebase Admin not configured. Using in-memory storage.');
