@@ -4,7 +4,7 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM loaded, initializing...');
-    initGlobe();
+    initWorkerGlobe();
     initMobileMenu();
     initScrollAnimations();
 });
@@ -12,75 +12,38 @@ document.addEventListener('DOMContentLoaded', () => {
 // ================================
 // 3D GLOBE VISUALIZATION
 // ================================
-function initGlobe() {
-    console.log('Initializing globe...');
-    const globeContainer = document.getElementById('globeViz');
-    
-    if (!globeContainer) {
-        console.error('Globe container not found!');
-        return;
+function initWorkerGlobe() {
+    const canvas = document.getElementById('globeViz');
+    if (!canvas) return;
+
+    if (!('transferControlToOffscreen' in canvas)) {
+        console.error('OffscreenCanvas is not supported in this browser.');
+        return; 
     }
-    
-    console.log('Globe container found:', globeContainer);
 
-    // Check if Globe is available
-    if (typeof Globe === 'undefined') {
-        console.error('Globe.gl library not loaded!');
-        return;
-    }
-    
-    console.log('Globe library loaded, creating globe...');
+    // Detach canvas from Main Thread
+    const offscreenCanvas = canvas.transferControlToOffscreen();
 
-    try {
-        // Configuration
-        const N_ARCS = 20;
-        const ARC_REL_LEN = 0.4;
-        const FLIGHT_TIME = 1000;
+    // Start Worker
+    const worker = new Worker('js/globe-worker.js');
 
-        // Generate random data
-        const arcsData = [...Array(N_ARCS).keys()].map(() => ({
-            startLat: (Math.random() - 0.5) * 180,
-            startLng: (Math.random() - 0.5) * 360,
-            endLat: (Math.random() - 0.5) * 180,
-            endLng: (Math.random() - 0.5) * 360,
-            color: [['#3b82f6', '#8b5cf6', '#ec4899'][Math.round(Math.random() * 2)], ['#3b82f6', '#8b5cf6', '#ec4899'][Math.round(Math.random() * 2)]]
-        }));
+    worker.postMessage({ 
+        type: 'INIT', 
+        canvas: offscreenCanvas,
+        width: window.innerWidth,
+        height: window.innerHeight,
+        pixelRatio: Math.min(window.devicePixelRatio, 1.2)
+    }, [offscreenCanvas]); 
 
-        // Initialize Globe
-        const world = Globe()(globeContainer)
-            .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
-            .arcsData(arcsData)
-            .arcColor('color')
-            .arcDashLength(ARC_REL_LEN)
-            .arcDashGap(2)
-            .arcDashInitialGap(1)
-            .arcDashAnimateTime(FLIGHT_TIME)
-            .atmosphereColor('#3b82f6')
-            .atmosphereAltitude(0.15)
-            .width(globeContainer.offsetWidth || window.innerWidth)
-            .height(globeContainer.offsetHeight || window.innerHeight);
-
-        // Auto-rotate
-        world.controls().autoRotate = true;
-        world.controls().autoRotateSpeed = 0.5;
-        
-        // Zoom out to fit screen
-        world.pointOfView({ altitude: 2.5 });
-        
-        console.log('Globe created successfully!');
-
-        // Handle Resize - keep globe responsive
-        window.addEventListener('resize', () => {
-            const width = globeContainer.offsetWidth || window.innerWidth;
-            const height = globeContainer.offsetHeight || window.innerHeight;
-            world.width(width);
-            world.height(height);
+    window.addEventListener('resize', () => {
+        worker.postMessage({
+            type: 'RESIZE',
+            width: window.innerWidth,
+            height: window.innerHeight
         });
-        
-    } catch (error) {
-        console.error('Error initializing globe:', error);
-        globeContainer.innerHTML = '<div style="color: red; padding: 20px;">Globe failed to load: ' + error.message + '</div>';
-    }
+    });
+
+    console.log('Main thread is free! God-Tier Web Worker Active 🚀');
 }
 
 // ================================
@@ -89,67 +52,76 @@ function initGlobe() {
 function initMobileMenu() {
     const toggle = document.getElementById('mobileMenuToggle');
     const menu = document.getElementById('mobileMenu');
+    const closeButton = document.getElementById('mobileMenuClose');
     const links = document.querySelectorAll('.mobile-link');
     
     if (!toggle || !menu) return;
 
     let isOpen = false;
+    let previousFocus = null;
 
-    function toggleMenu() {
-        isOpen = !isOpen;
-        if (isOpen) {
-            menu.classList.remove('translate-x-full');
-            toggle.innerHTML = '<i class="fas fa-times text-xl"></i>';
-            document.body.style.overflow = 'hidden';
-        } else {
-            menu.classList.add('translate-x-full');
-            toggle.innerHTML = '<i class="fas fa-bars text-xl"></i>';
-            document.body.style.overflow = '';
+    function syncMenuState(open) {
+        toggle.setAttribute('aria-expanded', String(open));
+        toggle.setAttribute('aria-label', open ? 'Close navigation menu' : 'Open navigation menu');
+        menu.setAttribute('aria-hidden', String(!open));
+    }
+
+    function closeMenu({ restoreFocus = true } = {}) {
+        if (!isOpen) return;
+
+        isOpen = false;
+        menu.classList.add('translate-x-full');
+        document.body.style.overflow = '';
+        syncMenuState(false);
+
+        if (restoreFocus) {
+            toggle.focus();
+        } else if (previousFocus && typeof previousFocus.focus === 'function') {
+            previousFocus.focus();
         }
     }
 
+    function toggleMenu() {
+        if (!isOpen) {
+            previousFocus = document.activeElement;
+            isOpen = true;
+            menu.classList.remove('translate-x-full');
+            document.body.style.overflow = 'hidden';
+            syncMenuState(true);
+            const firstFocusable = menu.querySelector('.mobile-link, button, [href], [tabindex]:not([tabindex="-1"])');
+            if (firstFocusable) {
+                firstFocusable.focus();
+            }
+        } else {
+            closeMenu();
+        }
+    }
+
+    syncMenuState(false);
     toggle.addEventListener('click', toggleMenu);
+    if (closeButton) {
+        closeButton.addEventListener('click', () => closeMenu());
+    }
     
     // Close on link click
     links.forEach(link => {
         link.addEventListener('click', () => {
-            if (isOpen) toggleMenu();
+            closeMenu({ restoreFocus: false });
         });
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closeMenu();
+        }
     });
 }
 
 // ================================
-// SCROLL ANIMATIONS (GSAP)
+// SCROLL ANIMATIONS (Native)
 // ================================
 function initScrollAnimations() {
-    // Check if GSAP is available
-    if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
-        try {
-            gsap.registerPlugin(ScrollTrigger);
-
-            // Reveal elements on scroll, but exclude the navbar logo
-            gsap.utils.toArray('.group:not(.navbar-logo)').forEach(group => {
-                gsap.fromTo(group, 
-                    { y: 50, opacity: 0 },
-                    {
-                        y: 0,
-                        opacity: 1,
-                        duration: 0.8,
-                        stagger: 0.2,
-                        scrollTrigger: {
-                            trigger: group,
-                            start: "top 80%",
-                            toggleActions: "play none none reverse"
-                        }
-                    }
-                );
-            });
-        } catch (error) {
-            console.warn('GSAP animations not initialized:', error);
-        }
-    }
-
-    // Navbar Blur Effect (works without GSAP)
+    // Navbar Blur Effect
     const navbar = document.getElementById('navbar');
     if (navbar) {
         window.addEventListener('scroll', () => {
