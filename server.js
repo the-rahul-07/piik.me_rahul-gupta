@@ -7,13 +7,12 @@ const { nanoid } = require('nanoid');
 const admin = require('firebase-admin');
 const redisUtils = require('./src/utils/redis.utils');
 require('dotenv').config();
-
-const { securityHeaders, apiLimiter } = require("./src/middleware/security.middleware")
-
+const fetch = require('node-fetch');
+// Initialize Firebase Admin
 // Initialize Firebase Admin
 let db = null;
-
 let auth = null;
+
 try {
   admin.initializeApp({
     credential: admin.credential.cert({
@@ -26,12 +25,10 @@ try {
   db = admin.firestore();
   auth = admin.auth();
 
-  db = admin.firestore();
   console.log('✅ Firebase Admin initialized');
 } catch (error) {
   console.log('⚠️ Firebase Admin not configured. Using in-memory storage.');
   console.log('   See FIREBASE_SETUP.md for setup instructions.');
-  // db and auth remain null - app will use in-memory fallback
 }
 
 const app = express();
@@ -910,178 +907,178 @@ app.get('/:username/:slug', async (req, res) => {
     return res.status(404).send('Link not found');
   }
 
-  // Track click analytics
+  // Extract request data before redirecting
   const userAgent = req.headers['user-agent'] || 'Unknown';
   const httpReferrer = req.headers['referer'] || req.headers['referrer'] || '';
-
-  // Enhanced referrer detection
-  let referrerSource = 'Direct';
-
-  // Check URL query parameters first (most reliable - from share menu)
   const utmSource = req.query.utm_source;
+  const clientIP = req.headers['x-forwarded-for']?.split(',')[0] || 
+                   req.headers['x-real-ip'] || 
+                   req.connection.remoteAddress || 
+                   'unknown';
 
-  if (utmSource) {
-    // Use UTM source from share menu
-    referrerSource = utmSource.charAt(0).toUpperCase() + utmSource.slice(1);
-  } else if (httpReferrer) {
-    // Parse HTTP referrer header
-    try {
-      const refUrl = new URL(httpReferrer);
-      const hostname = refUrl.hostname.toLowerCase().replace('www.', '');
-
-      // Map common domains to friendly names
-      if (hostname.includes('google')) referrerSource = 'Google';
-      else if (hostname.includes('facebook') || hostname.includes('fb.com')) referrerSource = 'Facebook';
-      else if (hostname.includes('instagram')) referrerSource = 'Instagram';
-      else if (hostname.includes('twitter') || hostname.includes('t.co')) referrerSource = 'X (formerly Twitter)';
-      else if (hostname.includes('linkedin')) referrerSource = 'LinkedIn';
-      else if (hostname.includes('reddit')) referrerSource = 'Reddit';
-      else if (hostname.includes('tiktok')) referrerSource = 'TikTok';
-      else if (hostname.includes('youtube')) referrerSource = 'YouTube';
-      else if (hostname.includes('pinterest')) referrerSource = 'Pinterest';
-      else if (hostname.includes('whatsapp')) referrerSource = 'WhatsApp';
-      else if (hostname.includes('telegram')) referrerSource = 'Telegram';
-      else if (hostname.includes('discord')) referrerSource = 'Discord';
-      else if (hostname.includes('slack')) referrerSource = 'Slack';
-      else referrerSource = hostname;
-    } catch (e) {
-      referrerSource = httpReferrer;
-    }
-  } else {
-    // Detect in-app browsers based on User-Agent
-    const ua = userAgent.toLowerCase();
-
-    if (ua.includes('whatsapp')) referrerSource = 'WhatsApp';
-    else if (ua.includes('instagram')) referrerSource = 'Instagram';
-    else if (ua.includes('fbav') || ua.includes('fban') || ua.includes('fb_iab')) referrerSource = 'Facebook';
-    else if (ua.includes('twitter')) referrerSource = 'X (formerly Twitter)';
-    else if (ua.includes('linkedin')) referrerSource = 'LinkedIn';
-    else if (ua.includes('snapchat')) referrerSource = 'Snapchat';
-    else if (ua.includes('tiktok')) referrerSource = 'TikTok';
-    else if (ua.includes('telegram')) referrerSource = 'Telegram';
-    else if (ua.includes('line/')) referrerSource = 'LINE';
-    else if (ua.includes('kakaotalk')) referrerSource = 'KakaoTalk';
-    else if (ua.includes('wechat')) referrerSource = 'WeChat';
-    else referrerSource = 'Unknown';
-  }
-
-  // Device detection
-  const isMobile = /mobile|android|iphone|ipad|ipod/i.test(userAgent);
-  const deviceType = isMobile ? 'Mobile' : 'Desktop';
-
-  // Enhanced browser detection
-  let browser = 'Other';
-  const ua = userAgent.toLowerCase();
-
-  // Check for in-app browsers first
-  if (ua.includes('instagram')) browser = 'Instagram App';
-  else if (ua.includes('whatsapp')) browser = 'WhatsApp';
-  else if (ua.includes('fb_iab') || ua.includes('fbav')) browser = 'Facebook App';
-  else if (ua.includes('twitter')) browser = 'Twitter App';
-  else if (ua.includes('linkedin')) browser = 'LinkedIn App';
-  // Regular browsers
-  else if (ua.includes('edg')) browser = 'Edge';
-  else if (ua.includes('chrome') && !ua.includes('edg')) browser = 'Chrome';
-  else if (ua.includes('safari') && !ua.includes('chrome')) browser = 'Safari';
-  else if (ua.includes('firefox')) browser = 'Firefox';
-  else if (ua.includes('opera') || ua.includes('opr')) browser = 'Opera';
-
-  // Get client IP address
-  const clientIP = req.headers['x-forwarded-for']?.split(',')[0] ||
-    req.headers['x-real-ip'] ||
-    req.connection.remoteAddress ||
-    'unknown';
-
-  // Fetch geolocation data
-  let locationData = {
-    country: 'Unknown',
-    city: 'Unknown',
-    region: 'Unknown'
-  };
-
-  try {
-    // Use ip-api.com for free geolocation (no API key required)
-    const geoResponse = await fetch(`http://ip-api.com/json/${clientIP}?fields=status,country,regionName,city`);
-    if (geoResponse.ok) {
-      const geoData = await geoResponse.json();
-      if (geoData.status === 'success') {
-        locationData = {
-          country: geoData.country || 'Unknown',
-          city: geoData.city || 'Unknown',
-          region: geoData.regionName || 'Unknown'
-        };
-      }
-    }
-  } catch (geoError) {
-    console.log('Geolocation lookup failed:', geoError.message);
-  }
-
-  const clickData = {
-    timestamp: new Date().toISOString(),
-    device: deviceType,
-    browser,
-    referrer: referrerSource,
-    location: locationData
-  };
-
-  // Update analytics
-  try {
-    const firestoreId = toFirestoreId(shortCode);
-    const analyticsRef = db.collection(COLLECTIONS.ANALYTICS).doc(firestoreId);
-    const analyticsDoc = await analyticsRef.get();
-
-    if (analyticsDoc.exists) {
-      // Store each click as a separate document in clicks sub-collection
-      // This avoids the 1MB Firestore document limit and allows infinite scaling
-      const clickRef = analyticsRef.collection('clicks').doc();
-      await clickRef.set(clickData);
-
-      // Update aggregate counters
-      await analyticsRef.update({
-        clicks: admin.firestore.FieldValue.increment(1),
-        [`devices.${deviceType}`]: admin.firestore.FieldValue.increment(1),
-        [`browsers.${browser}`]: admin.firestore.FieldValue.increment(1),
-        [`countries.${locationData.country}`]: admin.firestore.FieldValue.increment(1),
-        [`locations.${locationData.city}`]: admin.firestore.FieldValue.increment(1),
-        [`referrers.${referrerSource}`]: admin.firestore.FieldValue.increment(1)
-      });
-    }
-  } catch (error) {
-    console.error('Error updating analytics:', error);
-
-    // Fallback to in-memory analytics
-    if (!analytics.has(shortCode)) {
-      analytics.set(shortCode, {
-        impressions: 0,
-        clicks: 0,
-        shares: 0,
-        clickHistory: [],
-        devices: {},
-        browsers: {},
-        countries: {},
-        locations: {},
-        referrers: {}
-      });
-    }
-
-    const analyticsData = analytics.get(shortCode);
-    analyticsData.clicks++;
-    analyticsData.clickHistory.push(clickData);
-    analyticsData.devices[deviceType] = (analyticsData.devices[deviceType] || 0) + 1;
-    analyticsData.browsers[browser] = (analyticsData.browsers[browser] || 0) + 1;
-    analyticsData.countries[locationData.country] = (analyticsData.countries[locationData.country] || 0) + 1;
-    analyticsData.locations[locationData.city] = (analyticsData.locations[locationData.city] || 0) + 1;
-    analyticsData.referrers[referrerSource] = (analyticsData.referrers[referrerSource] || 0) + 1;
-  }
-
-  // Emit real-time analytics update via Socket.io
-  io.emit('analyticsUpdate', {
-    shortCode,
-    click: clickData
-  });
-
-  // Redirect to original URL
+  // Redirect immediately
   res.redirect(link.originalUrl);
+
+  // Track click analytics asynchronously
+  (async () => {
+    // Enhanced referrer detection
+    let referrerSource = 'Direct';
+    
+    // Check URL query parameters first (most reliable - from share menu)
+    if (utmSource) {
+      // Use UTM source from share menu
+      referrerSource = utmSource.charAt(0).toUpperCase() + utmSource.slice(1);
+    } else if (httpReferrer) {
+      // Parse HTTP referrer header
+      try {
+        const refUrl = new URL(httpReferrer);
+        const hostname = refUrl.hostname.toLowerCase().replace('www.', '');
+        
+        // Map common domains to friendly names
+        if (hostname.includes('google')) referrerSource = 'Google';
+        else if (hostname.includes('facebook') || hostname.includes('fb.com')) referrerSource = 'Facebook';
+        else if (hostname.includes('instagram')) referrerSource = 'Instagram';
+        else if (hostname.includes('twitter') || hostname.includes('t.co')) referrerSource = 'X (formerly Twitter)';
+        else if (hostname.includes('linkedin')) referrerSource = 'LinkedIn';
+        else if (hostname.includes('reddit')) referrerSource = 'Reddit';
+        else if (hostname.includes('tiktok')) referrerSource = 'TikTok';
+        else if (hostname.includes('youtube')) referrerSource = 'YouTube';
+        else if (hostname.includes('pinterest')) referrerSource = 'Pinterest';
+        else if (hostname.includes('whatsapp')) referrerSource = 'WhatsApp';
+        else if (hostname.includes('telegram')) referrerSource = 'Telegram';
+        else if (hostname.includes('discord')) referrerSource = 'Discord';
+        else if (hostname.includes('slack')) referrerSource = 'Slack';
+        else referrerSource = hostname;
+      } catch (e) {
+        referrerSource = httpReferrer;
+      }
+    } else {
+      // Detect in-app browsers based on User-Agent
+      const ua = userAgent.toLowerCase();
+      
+      if (ua.includes('whatsapp')) referrerSource = 'WhatsApp';
+      else if (ua.includes('instagram')) referrerSource = 'Instagram';
+      else if (ua.includes('fbav') || ua.includes('fban') || ua.includes('fb_iab')) referrerSource = 'Facebook';
+      else if (ua.includes('twitter')) referrerSource = 'X (formerly Twitter)';
+      else if (ua.includes('linkedin')) referrerSource = 'LinkedIn';
+      else if (ua.includes('snapchat')) referrerSource = 'Snapchat';
+      else if (ua.includes('tiktok')) referrerSource = 'TikTok';
+      else if (ua.includes('telegram')) referrerSource = 'Telegram';
+      else if (ua.includes('line/')) referrerSource = 'LINE';
+      else if (ua.includes('kakaotalk')) referrerSource = 'KakaoTalk';
+      else if (ua.includes('wechat')) referrerSource = 'WeChat';
+      else referrerSource = 'Unknown';
+    }
+    
+    // Device detection
+    const isMobile = /mobile|android|iphone|ipad|ipod/i.test(userAgent);
+    const deviceType = isMobile ? 'Mobile' : 'Desktop';
+    
+    // Enhanced browser detection
+    let browser = 'Other';
+    const ua = userAgent.toLowerCase();
+    
+    // Check for in-app browsers first
+    if (ua.includes('instagram')) browser = 'Instagram App';
+    else if (ua.includes('whatsapp')) browser = 'WhatsApp';
+    else if (ua.includes('fb_iab') || ua.includes('fbav')) browser = 'Facebook App';
+    else if (ua.includes('twitter')) browser = 'Twitter App';
+    else if (ua.includes('linkedin')) browser = 'LinkedIn App';
+    // Regular browsers
+    else if (ua.includes('edg')) browser = 'Edge';
+    else if (ua.includes('chrome') && !ua.includes('edg')) browser = 'Chrome';
+    else if (ua.includes('safari') && !ua.includes('chrome')) browser = 'Safari';
+    else if (ua.includes('firefox')) browser = 'Firefox';
+    else if (ua.includes('opera') || ua.includes('opr')) browser = 'Opera';
+    
+    // Fetch geolocation data
+    let locationData = {
+      country: 'Unknown',
+      city: 'Unknown',
+      region: 'Unknown'
+    };
+    
+    try {
+      // Use ip-api.com for free geolocation (no API key required)
+      const geoResponse = await fetch(`http://ip-api.com/json/${clientIP}?fields=status,country,regionName,city`);
+      if (geoResponse.ok) {
+        const geoData = await geoResponse.json();
+        if (geoData.status === 'success') {
+          locationData = {
+            country: geoData.country || 'Unknown',
+            city: geoData.city || 'Unknown',
+            region: geoData.regionName || 'Unknown'
+          };
+        }
+      }
+    } catch (geoError) {
+      console.log('Geolocation lookup failed:', geoError.message);
+    }
+    
+    const clickData = {
+      timestamp: new Date().toISOString(),
+      device: deviceType,
+      browser,
+      referrer: referrerSource,
+      location: locationData
+    };
+
+    // Update analytics
+    try {
+      const firestoreId = toFirestoreId(shortCode);
+      const analyticsRef = db.collection(COLLECTIONS.ANALYTICS).doc(firestoreId);
+      const analyticsDoc = await analyticsRef.get();
+
+      if (analyticsDoc.exists) {
+        // Store each click as a separate document in clicks sub-collection
+        // This avoids the 1MB Firestore document limit and allows infinite scaling
+        const clickRef = analyticsRef.collection('clicks').doc();
+        await clickRef.set(clickData);
+
+        // Update aggregate counters
+        await analyticsRef.update({
+          clicks: admin.firestore.FieldValue.increment(1),
+          [`devices.${deviceType}`]: admin.firestore.FieldValue.increment(1),
+          [`browsers.${browser}`]: admin.firestore.FieldValue.increment(1),
+          [`countries.${locationData.country}`]: admin.firestore.FieldValue.increment(1),
+          [`locations.${locationData.city}`]: admin.firestore.FieldValue.increment(1),
+          [`referrers.${referrerSource}`]: admin.firestore.FieldValue.increment(1)
+        });
+      }
+    } catch (error) {
+      console.error('Error updating analytics:', error);
+      
+      // Fallback to in-memory analytics
+      if (!analytics.has(shortCode)) {
+        analytics.set(shortCode, {
+          impressions: 0,
+          clicks: 0,
+          shares: 0,
+          clickHistory: [],
+          devices: {},
+          browsers: {},
+          countries: {},
+          locations: {},
+          referrers: {}
+        });
+      }
+      
+      const analyticsData = analytics.get(shortCode);
+      analyticsData.clicks++;
+      analyticsData.clickHistory.push(clickData);
+      analyticsData.devices[deviceType] = (analyticsData.devices[deviceType] || 0) + 1;
+      analyticsData.browsers[browser] = (analyticsData.browsers[browser] || 0) + 1;
+      analyticsData.countries[locationData.country] = (analyticsData.countries[locationData.country] || 0) + 1;
+      analyticsData.locations[locationData.city] = (analyticsData.locations[locationData.city] || 0) + 1;
+      analyticsData.referrers[referrerSource] = (analyticsData.referrers[referrerSource] || 0) + 1;
+    }
+
+    // Emit real-time analytics update via Socket.io
+    io.emit('analyticsUpdate', {
+      shortCode,
+      click: clickData
+    });
+  })().catch(err => console.error('Background analytics error:', err));
 });
 
 
@@ -1124,206 +1121,206 @@ app.get('/:shortCode', async (req, res) => {
     return res.status(404).send('Link not found');
   }
 
-  // Track click analytics
+  // Extract request data before redirecting
   const userAgent = req.headers['user-agent'] || 'Unknown';
   const httpReferrer = req.headers['referer'] || req.headers['referrer'] || '';
-
-  // Enhanced referrer detection
-  let referrerSource = 'Direct';
-
-  // Check URL query parameters first (most reliable - from share menu)
   const utmSource = req.query.utm_source;
+  const clientIP = req.headers['x-forwarded-for']?.split(',')[0] || 
+                   req.headers['x-real-ip'] || 
+                   req.connection.remoteAddress || 
+                   'unknown';
 
-  if (utmSource) {
-    // Use UTM source from share menu
-    referrerSource = utmSource.charAt(0).toUpperCase() + utmSource.slice(1);
-  } else if (httpReferrer) {
-    // Parse HTTP referrer header
-    try {
-      const refUrl = new URL(httpReferrer);
-      const hostname = refUrl.hostname.toLowerCase().replace('www.', '');
-
-      // Map common domains to friendly names
-      if (hostname.includes('google')) referrerSource = 'Google';
-      else if (hostname.includes('facebook') || hostname.includes('fb.com')) referrerSource = 'Facebook';
-      else if (hostname.includes('instagram')) referrerSource = 'Instagram';
-      else if (hostname.includes('twitter') || hostname.includes('t.co')) referrerSource = 'X (formerly Twitter)';
-      else if (hostname.includes('linkedin')) referrerSource = 'LinkedIn';
-      else if (hostname.includes('reddit')) referrerSource = 'Reddit';
-      else if (hostname.includes('tiktok')) referrerSource = 'TikTok';
-      else if (hostname.includes('youtube')) referrerSource = 'YouTube';
-      else if (hostname.includes('pinterest')) referrerSource = 'Pinterest';
-      else if (hostname.includes('whatsapp')) referrerSource = 'WhatsApp';
-      else if (hostname.includes('telegram')) referrerSource = 'Telegram';
-      else if (hostname.includes('discord')) referrerSource = 'Discord';
-      else if (hostname.includes('slack')) referrerSource = 'Slack';
-      else referrerSource = hostname;
-    } catch (e) {
-      referrerSource = httpReferrer;
-    }
-  } else {
-    // Detect in-app browsers based on User-Agent
-    const ua = userAgent.toLowerCase();
-
-    if (ua.includes('whatsapp')) referrerSource = 'WhatsApp';
-    else if (ua.includes('instagram')) referrerSource = 'Instagram';
-    else if (ua.includes('fbav') || ua.includes('fban') || ua.includes('fb_iab')) referrerSource = 'Facebook';
-    else if (ua.includes('twitter')) referrerSource = 'X (formerly Twitter)';
-    else if (ua.includes('linkedin')) referrerSource = 'LinkedIn';
-    else if (ua.includes('snapchat')) referrerSource = 'Snapchat';
-    else if (ua.includes('tiktok')) referrerSource = 'TikTok';
-    else if (ua.includes('telegram')) referrerSource = 'Telegram';
-    else if (ua.includes('line/')) referrerSource = 'LINE';
-    else if (ua.includes('kakaotalk')) referrerSource = 'KakaoTalk';
-    else if (ua.includes('wechat')) referrerSource = 'WeChat';
-    else referrerSource = 'Unknown';
-  }
-
-  // Device detection
-  const isMobile = /mobile|android|iphone|ipad|ipod/i.test(userAgent);
-  const deviceType = isMobile ? 'Mobile' : 'Desktop';
-
-  // Enhanced browser detection
-  let browser = 'Other';
-  const ua = userAgent.toLowerCase();
-
-  // Check for in-app browsers first
-  if (ua.includes('instagram')) browser = 'Instagram App';
-  else if (ua.includes('whatsapp')) browser = 'WhatsApp';
-  else if (ua.includes('fb_iab') || ua.includes('fbav')) browser = 'Facebook App';
-  else if (ua.includes('twitter')) browser = 'Twitter App';
-  else if (ua.includes('linkedin')) browser = 'LinkedIn App';
-  // Regular browsers
-  else if (ua.includes('edg')) browser = 'Edge';
-  else if (ua.includes('chrome') && !ua.includes('edg')) browser = 'Chrome';
-  else if (ua.includes('safari') && !ua.includes('chrome')) browser = 'Safari';
-  else if (ua.includes('firefox')) browser = 'Firefox';
-  else if (ua.includes('opera') || ua.includes('opr')) browser = 'Opera';
-
-  // Get client IP address
-  const clientIP = req.headers['x-forwarded-for']?.split(',')[0] ||
-    req.headers['x-real-ip'] ||
-    req.connection.remoteAddress ||
-    'unknown';
-
-  // Fetch geolocation data
-  let locationData = {
-    country: 'Unknown',
-    city: 'Unknown',
-    region: 'Unknown'
-  };
-
-  try {
-    // Use ip-api.com for free geolocation (no API key required)
-    const geoResponse = await fetch(`http://ip-api.com/json/${clientIP}?fields=status,country,regionName,city`);
-    if (geoResponse.ok) {
-      const geoData = await geoResponse.json();
-      if (geoData.status === 'success') {
-        locationData = {
-          country: geoData.country || 'Unknown',
-          city: geoData.city || 'Unknown',
-          region: geoData.regionName || 'Unknown'
-        };
-      }
-    }
-  } catch (geoError) {
-    console.log('Geolocation lookup failed:', geoError.message);
-  }
-
-  const clickData = {
-    timestamp: new Date().toISOString(),
-    device: deviceType,
-    browser,
-    referrer: referrerSource,
-    userAgent: userAgent.substring(0, 200), // Store truncated UA for debugging
-    isShared: utmSource ? true : false, // Track if this click came from a share
-    location: locationData,
-    ipAddress: clientIP // Store IP address for detailed analytics
-  };
-
-  try {
-    // Update Firestore
-    const firestoreId = toFirestoreId(shortCode);
-    const analyticsRef = db.collection(COLLECTIONS.ANALYTICS).doc(firestoreId);
-    const doc = await analyticsRef.get();
-
-    if (doc.exists) {
-      const currentData = doc.data();
-
-      // Increment impressions AND clicks
-      // Impressions represent total views (including clicks)
-      // This way: impressions >= clicks always
-      // Create location key (City, Region)
-      const locationKey = `${locationData.city}, ${locationData.region}`;
-
-      // Store each click as a separate document in clicks sub-collection
-      // This avoids the 1MB Firestore document limit and allows infinite scaling
-      const clickRef = analyticsRef.collection('clicks').doc();
-      await clickRef.set(clickData);
-
-      const updateData = {
-        impressions: admin.firestore.FieldValue.increment(1),
-        clicks: admin.firestore.FieldValue.increment(1),
-        [`devices.${deviceType}`]: admin.firestore.FieldValue.increment(1),
-        [`browsers.${browser}`]: admin.firestore.FieldValue.increment(1),
-        [`referrers.${referrerSource}`]: admin.firestore.FieldValue.increment(1),
-        [`countries.${locationData.country}`]: admin.firestore.FieldValue.increment(1),
-        [`locations.${locationKey}`]: admin.firestore.FieldValue.increment(1)
-      };
-
-      // If UTM source exists, count it as a share
-      if (utmSource) {
-        updateData.shares = admin.firestore.FieldValue.increment(1);
-      }
-
-      await analyticsRef.update(updateData);
-
-      const updated = await analyticsRef.get();
-      const stats = updated.data();
-
-      // Emit real-time update
-      io.emit(`analytics:${shortCode}`, {
-        type: 'click',
-        data: stats
-      });
-    }
-  } catch (error) {
-    console.error('Error tracking click:', error);
-
-    // Fallback to in-memory
-    const stats = analytics.get(shortCode);
-    if (stats) {
-      stats.impressions++;
-      stats.clicks++;
-      stats.devices[deviceType] = (stats.devices[deviceType] || 0) + 1;
-      stats.browsers[browser] = (stats.browsers[browser] || 0) + 1;
-      stats.referrers[referrerSource] = (stats.referrers[referrerSource] || 0) + 1;
-
-      // Track location
-      const locationKey = `${locationData.city}, ${locationData.region}`;
-      if (!stats.countries) stats.countries = {};
-      if (!stats.locations) stats.locations = {};
-      stats.countries[locationData.country] = (stats.countries[locationData.country] || 0) + 1;
-      stats.locations[locationKey] = (stats.locations[locationKey] || 0) + 1;
-
-      stats.clickHistory.push(clickData);
-
-      // Count as share if UTM source exists
-      if (utmSource) {
-        stats.shares++;
-      }
-
-      analytics.set(shortCode, stats);
-
-      io.emit(`analytics:${shortCode}`, {
-        type: 'click',
-        data: stats
-      });
-    }
-  }
-
-  // Redirect to original URL
+  // Redirect immediately
   res.redirect(link.originalUrl);
+
+  // Track click analytics asynchronously
+  (async () => {
+    // Enhanced referrer detection
+    let referrerSource = 'Direct';
+    
+    // Check URL query parameters first (most reliable - from share menu)
+    if (utmSource) {
+      // Use UTM source from share menu
+      referrerSource = utmSource.charAt(0).toUpperCase() + utmSource.slice(1);
+    } else if (httpReferrer) {
+      // Parse HTTP referrer header
+      try {
+        const refUrl = new URL(httpReferrer);
+        const hostname = refUrl.hostname.toLowerCase().replace('www.', '');
+        
+        // Map common domains to friendly names
+        if (hostname.includes('google')) referrerSource = 'Google';
+        else if (hostname.includes('facebook') || hostname.includes('fb.com')) referrerSource = 'Facebook';
+        else if (hostname.includes('instagram')) referrerSource = 'Instagram';
+        else if (hostname.includes('twitter') || hostname.includes('t.co')) referrerSource = 'X (formerly Twitter)';
+        else if (hostname.includes('linkedin')) referrerSource = 'LinkedIn';
+        else if (hostname.includes('reddit')) referrerSource = 'Reddit';
+        else if (hostname.includes('tiktok')) referrerSource = 'TikTok';
+        else if (hostname.includes('youtube')) referrerSource = 'YouTube';
+        else if (hostname.includes('pinterest')) referrerSource = 'Pinterest';
+        else if (hostname.includes('whatsapp')) referrerSource = 'WhatsApp';
+        else if (hostname.includes('telegram')) referrerSource = 'Telegram';
+        else if (hostname.includes('discord')) referrerSource = 'Discord';
+        else if (hostname.includes('slack')) referrerSource = 'Slack';
+        else referrerSource = hostname;
+      } catch (e) {
+        referrerSource = httpReferrer;
+      }
+    } else {
+      // Detect in-app browsers based on User-Agent
+      const ua = userAgent.toLowerCase();
+      
+      if (ua.includes('whatsapp')) referrerSource = 'WhatsApp';
+      else if (ua.includes('instagram')) referrerSource = 'Instagram';
+      else if (ua.includes('fbav') || ua.includes('fban') || ua.includes('fb_iab')) referrerSource = 'Facebook';
+      else if (ua.includes('twitter')) referrerSource = 'X (formerly Twitter)';
+      else if (ua.includes('linkedin')) referrerSource = 'LinkedIn';
+      else if (ua.includes('snapchat')) referrerSource = 'Snapchat';
+      else if (ua.includes('tiktok')) referrerSource = 'TikTok';
+      else if (ua.includes('telegram')) referrerSource = 'Telegram';
+      else if (ua.includes('line/')) referrerSource = 'LINE';
+      else if (ua.includes('kakaotalk')) referrerSource = 'KakaoTalk';
+      else if (ua.includes('wechat')) referrerSource = 'WeChat';
+      else referrerSource = 'Unknown';
+    }
+    
+    // Device detection
+    const isMobile = /mobile|android|iphone|ipad|ipod/i.test(userAgent);
+    const deviceType = isMobile ? 'Mobile' : 'Desktop';
+    
+    // Enhanced browser detection
+    let browser = 'Other';
+    const ua = userAgent.toLowerCase();
+    
+    // Check for in-app browsers first
+    if (ua.includes('instagram')) browser = 'Instagram App';
+    else if (ua.includes('whatsapp')) browser = 'WhatsApp';
+    else if (ua.includes('fb_iab') || ua.includes('fbav')) browser = 'Facebook App';
+    else if (ua.includes('twitter')) browser = 'Twitter App';
+    else if (ua.includes('linkedin')) browser = 'LinkedIn App';
+    // Regular browsers
+    else if (ua.includes('edg')) browser = 'Edge';
+    else if (ua.includes('chrome') && !ua.includes('edg')) browser = 'Chrome';
+    else if (ua.includes('safari') && !ua.includes('chrome')) browser = 'Safari';
+    else if (ua.includes('firefox')) browser = 'Firefox';
+    else if (ua.includes('opera') || ua.includes('opr')) browser = 'Opera';
+    
+    // Fetch geolocation data
+    let locationData = {
+      country: 'Unknown',
+      city: 'Unknown',
+      region: 'Unknown'
+    };
+    
+    try {
+      // Use ip-api.com for free geolocation (no API key required)
+      const geoResponse = await fetch(`http://ip-api.com/json/${clientIP}?fields=status,country,regionName,city`);
+      if (geoResponse.ok) {
+        const geoData = await geoResponse.json();
+        if (geoData.status === 'success') {
+          locationData = {
+            country: geoData.country || 'Unknown',
+            city: geoData.city || 'Unknown',
+            region: geoData.regionName || 'Unknown'
+          };
+        }
+      }
+    } catch (geoError) {
+      console.log('Geolocation lookup failed:', geoError.message);
+    }
+    
+    const clickData = {
+      timestamp: new Date().toISOString(),
+      device: deviceType,
+      browser,
+      referrer: referrerSource,
+      userAgent: userAgent.substring(0, 200), // Store truncated UA for debugging
+      isShared: utmSource ? true : false, // Track if this click came from a share
+      location: locationData,
+      ipAddress: clientIP // Store IP address for detailed analytics
+    };
+
+    try {
+      // Update Firestore
+      const firestoreId = toFirestoreId(shortCode);
+      const analyticsRef = db.collection(COLLECTIONS.ANALYTICS).doc(firestoreId);
+      const doc = await analyticsRef.get();
+      
+      if (doc.exists) {
+        const currentData = doc.data();
+        
+        // Increment impressions AND clicks
+        // Impressions represent total views (including clicks)
+        // This way: impressions >= clicks always
+        // Create location key (City, Region)
+        const locationKey = `${locationData.city}, ${locationData.region}`;
+        
+        // Store each click as a separate document in clicks sub-collection
+        // This avoids the 1MB Firestore document limit and allows infinite scaling
+        const clickRef = analyticsRef.collection('clicks').doc();
+        await clickRef.set(clickData);
+
+        const updateData = {
+          impressions: admin.firestore.FieldValue.increment(1),
+          clicks: admin.firestore.FieldValue.increment(1),
+          [`devices.${deviceType}`]: admin.firestore.FieldValue.increment(1),
+          [`browsers.${browser}`]: admin.firestore.FieldValue.increment(1),
+          [`referrers.${referrerSource}`]: admin.firestore.FieldValue.increment(1),
+          [`countries.${locationData.country}`]: admin.firestore.FieldValue.increment(1),
+          [`locations.${locationKey}`]: admin.firestore.FieldValue.increment(1)
+        };
+        
+        // If UTM source exists, count it as a share
+        if (utmSource) {
+          updateData.shares = admin.firestore.FieldValue.increment(1);
+        }
+        
+        await analyticsRef.update(updateData);
+        
+        const updated = await analyticsRef.get();
+        const stats = updated.data();
+        
+        // Emit real-time update
+        io.emit(`analytics:${shortCode}`, {
+          type: 'click',
+          data: stats
+        });
+      }
+    } catch (error) {
+      console.error('Error tracking click:', error);
+      
+      // Fallback to in-memory
+      const stats = analytics.get(shortCode);
+      if (stats) {
+        stats.impressions++;
+        stats.clicks++;
+        stats.devices[deviceType] = (stats.devices[deviceType] || 0) + 1;
+        stats.browsers[browser] = (stats.browsers[browser] || 0) + 1;
+        stats.referrers[referrerSource] = (stats.referrers[referrerSource] || 0) + 1;
+        
+        // Track location
+        const locationKey = `${locationData.city}, ${locationData.region}`;
+        if (!stats.countries) stats.countries = {};
+        if (!stats.locations) stats.locations = {};
+        stats.countries[locationData.country] = (stats.countries[locationData.country] || 0) + 1;
+        stats.locations[locationKey] = (stats.locations[locationKey] || 0) + 1;
+        
+        stats.clickHistory.push(clickData);
+        
+        // Count as share if UTM source exists
+        if (utmSource) {
+          stats.shares++;
+        }
+        
+        analytics.set(shortCode, stats);
+        
+        io.emit(`analytics:${shortCode}`, {
+          type: 'click',
+          data: stats
+        });
+      }
+    }
+  })().catch(err => console.error('Background analytics error:', err));
 });
 
 // Admin endpoint: Sync all links to Redis
