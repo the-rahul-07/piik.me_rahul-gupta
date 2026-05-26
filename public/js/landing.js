@@ -121,17 +121,51 @@ function initMobileMenu() {
 // SCROLL ANIMATIONS (Native)
 // ================================
 function initScrollAnimations() {
-    // Navbar Blur Effect
     const navbar = document.getElementById('navbar');
-    if (navbar) {
-        window.addEventListener('scroll', () => {
-            if (window.scrollY > 50) {
-                navbar.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-                navbar.classList.add('shadow-lg');
-            } else {
-                navbar.style.backgroundColor = 'rgba(0, 0, 0, 0.2)';
-                navbar.classList.remove('shadow-lg');
+    if (!navbar) return;
+
+    let lastScrollY = 0;
+    let isNavbarVisible = true;
+    const SCROLL_THRESHOLD = 5; // Minimum scroll distance to trigger hide/show
+    const MIN_HIDE_SCROLL = 80; // Don't hide navbar until scrolled past this point
+
+    window.addEventListener('scroll', () => {
+        const currentScrollY = window.scrollY;
+        
+        // Navbar background effect
+        if (currentScrollY > 50) {
+            navbar.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+            navbar.classList.add('shadow-lg');
+        } else {
+            navbar.style.backgroundColor = 'rgba(0, 0, 0, 0.2)';
+            navbar.classList.remove('shadow-lg');
+        }
+
+        // Hide/show based on scroll direction
+        const scrollDifference = currentScrollY - lastScrollY;
+
+        // Always show navbar at top of page
+        if (currentScrollY <= 0) {
+            if (!isNavbarVisible) {
+                navbar.classList.remove('navbar-hide');
+                navbar.classList.add('navbar-show');
+                isNavbarVisible = true;
             }
-        });
-    }
+        } else if (currentScrollY > MIN_HIDE_SCROLL) {
+            // Scrolling down - hide navbar
+            if (scrollDifference > SCROLL_THRESHOLD && isNavbarVisible) {
+                navbar.classList.remove('navbar-show');
+                navbar.classList.add('navbar-hide');
+                isNavbarVisible = false;
+            }
+            // Scrolling up - show navbar
+            else if (scrollDifference < -SCROLL_THRESHOLD && !isNavbarVisible) {
+                navbar.classList.remove('navbar-hide');
+                navbar.classList.add('navbar-show');
+                isNavbarVisible = true;
+            }
+        }
+
+        lastScrollY = currentScrollY;
+    });
 }
