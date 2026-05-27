@@ -6,6 +6,7 @@ const path = require('path');
 const { nanoid } = require('nanoid');
 const admin = require('firebase-admin');
 const redisUtils = require('./src/utils/redis.utils');
+const redirectCache = require('./src/utils/redirect-cache.utils');
 const { securityHeaders, apiLimiter } = require('./src/middleware/security.middleware');
 require('dotenv').config();
 const fetch = (...args) => {
@@ -15,11 +16,10 @@ const fetch = (...args) => {
 
   return import('node-fetch').then(({ default: fetchFn }) => fetchFn(...args));
 };
-// Initialize Firebase Admin
+
 // Initialize Firebase Admin
 let db = null;
 let auth = null;
-
 try {
   admin.initializeApp({
     credential: admin.credential.cert({
