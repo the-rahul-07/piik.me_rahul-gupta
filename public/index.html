@@ -1179,6 +1179,22 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="form-section">
+                    <h4>Link Expiry (Optional)</h4>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Expire After Date</label>
+                            <input type="datetime-local" class="form-input" id="expiresAt">
+                            <small style="color: var(--text-tertiary); font-size: 12px;">Link auto-deactivates after this date</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Max Clicks</label>
+                            <input type="number" class="form-input" id="maxClicks" min="1" placeholder="e.g. 100">
+                            <small style="color: var(--text-tertiary); font-size: 12px;">Link auto-deactivates after N clicks</small>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="modalCancel">Cancel</button>

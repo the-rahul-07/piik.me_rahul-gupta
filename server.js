@@ -22,6 +22,12 @@ const fetch = (...args) => {
 let db = null;
 
 let auth = null;
+// Firebase state tracking
+const firebaseState = {
+  enabled: false,
+  mode: 'memory',
+  reason: 'Firebase not initialized'
+};
 
 try {
   admin.initializeApp({
@@ -34,10 +40,12 @@ try {
 
   db = admin.firestore();
   auth = admin.auth();
+  firebaseState.enabled = true;
+firebaseState.mode = 'firestore';
+firebaseState.reason = 'Firebase connected successfully';
 
 
-  db = admin.firestore();
-
+  
   console.log('✅ Firebase Admin initialized');
 } catch (error) {
   console.log('⚠️ Firebase Admin not configured. Using in-memory storage.');
@@ -88,7 +96,7 @@ const COLLECTIONS = {
 };
 
 // Middleware to verify Firebase token
-// Middleware to verify Firebase token
+
 async function verifyToken(req, res, next) {
   // If Firebase Auth is not available, reject with clear message
   if (!auth) {
@@ -331,6 +339,8 @@ app.post('/api/shorten', verifyToken, async (req, res) => {
   const shortUrl = `${baseUrl}/${shortCode}`;
   
   // Store link data
+  const { expiresAt, maxClicks } = req.body;
+
   const linkData = {
     originalUrl: finalUrl,
     shortCode,
@@ -340,7 +350,12 @@ app.post('/api/shorten', verifyToken, async (req, res) => {
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     utmParams: parseUTMParams(finalUrl) || utmParams || {},
     isCustom: !!customShortCode,
-    isActive: true
+    isActive: true,
+    expiresAt: expiresAt ? admin.firestore.Timestamp.fromDate(new Date(expiresAt)) : null,
+    maxClicks: maxClicks ? parseInt(maxClicks) : null,
+    clickCount: 0,
+    notifiedExpiry: false,
+    isExpired: false
   };
 
   const analyticsData = {
@@ -658,7 +673,14 @@ app.get('/api/user/links', verifyToken, async (req, res) => {
         continue;
       }
 
-
+      // Auto-deactivate on expiry
+      const nowDate = new Date();
+      const dateExpired = linkData.expiresAt && linkData.expiresAt.toDate && linkData.expiresAt.toDate() < nowDate;
+      const clickExpired = linkData.maxClicks && (linkData.clickCount || 0) >= linkData.maxClicks;
+      if ((dateExpired || clickExpired) && linkData.isActive !== false) {
+        await db.collection(COLLECTIONS.LINKS).doc(doc.id).update({ isActive: false, isExpired: true }).catch(() => {});
+        linkData.isActive = false;
+      }
 
       console.log(`Processing link: ${doc.id}`, { shortCode: linkData.shortCode, isActive: linkData.isActive });
       
@@ -1429,6 +1451,11 @@ app.post('/api/admin/sync-redis', verifyToken, async (req, res) => {
   }
 });
 
+// Expired link page
+app.get('/expired', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'expired.html'));
+});
+
 if (!isServerless) {
   // Socket.IO connection
   io.on('connection', (socket) => {
@@ -1443,6 +1470,32 @@ if (!isServerless) {
       console.log('Client disconnected:', socket.id);
     });
   });
+
+  // 24-hour pre-expiry notification check (runs every hour)
+  setInterval(async () => {
+    if (!db) return;
+    try {
+      const now = new Date();
+      const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const snapshot = await db.collection(COLLECTIONS.LINKS)
+        .where('isActive', '==', true)
+        .where('notifiedExpiry', '==', false)
+        .get();
+      for (const doc of snapshot.docs) {
+        const link = doc.data();
+        if (link.expiresAt && link.expiresAt.toDate) {
+          const expiry = link.expiresAt.toDate();
+          if (expiry <= in24h && expiry > now) {
+            console.log(`⏰ Link expiring soon: ${link.shortCode} (${link.userEmail})`);
+            await doc.ref.update({ notifiedExpiry: true });
+            // TODO: plug in Nodemailer here to email link.userEmail
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Expiry notification check error:', err);
+    }
+  }, 60 * 60 * 1000);
 
   // Start server
   const PORT = process.env.PORT || 3000;

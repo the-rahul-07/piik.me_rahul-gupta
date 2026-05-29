@@ -952,7 +952,12 @@ function clearCreateLinkForm() {
     utmMedium.value = '';
     utmCampaign.value = '';
     utmTerm.value = '';
-    utmContent.value = '';
+   utmContent.value = '';
+
+    const expiresAtInput = document.getElementById('expiresAt');
+    const maxClicksInput = document.getElementById('maxClicks');
+    if (expiresAtInput) expiresAtInput.value = '';
+    if (maxClicksInput) maxClicksInput.value = '';
     
     // Reset username prefix
     const usernamePrefix = document.getElementById('usernamePrefix');
@@ -1116,7 +1121,11 @@ async function handleCreateLink() {
                 url,
                 customShortCode: customCode || null,
                 username: userBioSlug || null,
-                utmParams: Object.keys(utmParams).length > 0 ? utmParams : null
+                utmParams: Object.keys(utmParams).length > 0 ? utmParams : null,
+                expiresAt: document.getElementById('expiresAt')?.value || null,
+                maxClicks: document.getElementById('maxClicks')?.value
+                    ? parseInt(document.getElementById('maxClicks').value)
+                    : null
             })
         });
         
