@@ -1264,9 +1264,13 @@ function displayLinks(links, filter) {
             <div class="link-content">
                 <div class="link-url">
                     <a href="${link.shortUrl}" class="link-short" target="_blank">${link.shortUrl.replace('https://', '').replace('http://', '')}</a>
-                    <button class="btn-icon" onclick="copyLink('${link.shortUrl}')" title="Copy">
-                        <i class="fas fa-copy"></i>
-                    </button>
+                    <button 
+    class="btn-icon copy-btn"
+    onclick="copyLink('${link.shortUrl}', this)"
+    title="Copy link"
+>
+    <i class="fas fa-copy"></i>
+</button>
                     ${isInactive ? `<span class="inactive-badge">Inactive</span>` : ''}
                     ${link.splitTest ? `<span class="split-test-badge" style="background: linear-gradient(135deg, var(--accent-purple), #8b5cf6); color: white; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; margin-left: 6px; display: inline-flex; align-items: center; gap: 4px;"><i class="fas fa-flask" style="font-size: 9px;"></i> Split Test</span>` : ''}
                 </div>
