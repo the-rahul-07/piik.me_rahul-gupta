@@ -49,7 +49,7 @@ Firebase SDK (auth)          Socket.IO (real-time analytics)
 
 | Layer         | Technology                                    |
 | ------------- | --------------------------------------------- |
-| Runtime       | Node.js v14+                                  |
+| Runtime       | Node.js v18+                                  |
 | Web Framework | Express.js 4.x                                |
 | Real-time     | Socket.IO 4.x                                 |
 | Auth          | Firebase Authentication (Google OAuth)        |
@@ -67,7 +67,7 @@ Firebase SDK (auth)          Socket.IO (real-time analytics)
 
 ## Prerequisites
 
-- **Node.js** v14 or higher — [Download](https://nodejs.org)
+- **Node.js** v18+ or higher — [Download](https://nodejs.org)
 - **npm** (bundled with Node.js)
 - **Git**
 - A **Google Account** to create a Firebase project
@@ -124,6 +124,8 @@ For Vercel deployment, set these same values in the Vercel dashboard under **Pro
 ---
 
 ## Firebase Setup
+
+> For detailed Firebase configuration instructions and troubleshooting, see [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md).
 
 1. Go to [Firebase Console](https://console.firebase.google.com) and create a new project.
 
@@ -431,6 +433,29 @@ Set all environment variables in the Vercel dashboard. The `vercel.json` at the 
 - [ ] Rate limiting configured (`express-rate-limit` already included)
 - [ ] HTTPS enforced (Vercel handles this automatically)
 - [ ] Error logging set up (Sentry recommended)
+
+## Troubleshooting
+
+### Port 3000 Already in Use
+
+```bash
+lsof -i :3000
+kill -9 <PID>
+```
+
+### Firebase Credential Errors
+
+- Verify FIREBASE_PRIVATE_KEY is copied correctly.
+- Ensure newline characters (\n) are preserved.
+- Confirm the project ID matches your Firebase project.
+
+### Module Not Found Errors
+
+```bash
+npm install
+```
+
+---
 
 ## Related Documentation
 
