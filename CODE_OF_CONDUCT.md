@@ -147,7 +147,6 @@ Community Impact Guidelines were inspired by
 
 [Contributor Covenant]: https://www.contributor-covenant.org
 [version]: https://www.contributor-covenant.org/version/2/1/code_of_conduct.html
-
-## [Mozilla CoC]: https://github.com/mozilla/diversity
+[Mozilla CoC]: https://github.com/mozilla/diversity
 
 _By participating in the PIIK.ME project, you agree to abide by this Code of Conduct._
