@@ -2369,14 +2369,6 @@ function startAnalyticsPolling(linkFilter) {
     window.analyticsPollFilter = linkFilter;
 }
 
-// Reset analytics UI to zero state (used when fetch fails or data is empty)
-function updateAnalyticsUI(totalClicks, uniqueClicks, impressions, ctr, referrers, devices, browsers, clickHistory) {
-    document.getElementById('analyticsImpressions').textContent = (impressions || 0).toLocaleString();
-    document.getElementById('analyticsClicks').textContent = (totalClicks || 0).toLocaleString();
-    document.getElementById('analyticsCTR').textContent = (ctr || 0).toFixed(1) + '%';
-    document.getElementById('analyticsVisitors').textContent = (uniqueClicks || 0).toLocaleString();
-}
-
 async function loadAnalyticsData(linkFilter) {
     try {
         // Check if user is authenticated

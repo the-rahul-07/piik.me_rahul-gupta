@@ -14,8 +14,7 @@ const fetch = typeof globalThis.fetch === 'function'
   : (...args) => import('node-fetch').then(({ default: fetchFn }) => fetchFn(...args));
 const redisUtils = require('./src/utils/redis.utils');
 const redirectCache = require('./src/utils/redirect-cache.utils');
-const splitTestService = require('./src/services/splitTest.service');
-const { securityHeaders, apiLimiter } = require('./src/middleware/security.middleware');
+const { securityHeaders, apiLimiter, bugReportLimiter } = require('./src/middleware/security.middleware');
 require('dotenv').config();
 
 // Initialize Firebase Admin
@@ -55,11 +54,15 @@ firebaseState.reason = 'Firebase connected successfully';
 const app = express();
 const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 const server = isServerless ? null : http.createServer(app);
+// Restrict Socket.IO CORS to the configured application origin.
+// Falls back to the same ALLOWED_ORIGIN used for the Express CORS middleware
+// so both share a single configuration point in the environment.
+const allowedOrigin = process.env.ALLOWED_ORIGIN || false;
 const io = isServerless
   ? { emit: () => {} }
   : socketIo(server, {
       cors: {
-        origin: "*",
+        origin: allowedOrigin,
         methods: ["GET", "POST"]
       }
     });
@@ -79,7 +82,15 @@ function fromFirestoreId(firestoreId) {
 // Middleware
 app.use(securityHeaders);
 app.use(apiLimiter);
-app.use(cors());
+// Restrict CORS to the configured application origin.
+// Without an origin restriction, any third-party website can make credentialed
+// cross-origin requests to the API. Set ALLOWED_ORIGIN in the environment to
+// the production front-end URL (e.g. https://piik.me). When unset, cross-origin
+// requests are blocked entirely (origin: false) rather than allowed for all.
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGIN || false,
+  credentials: true,
+}));
 app.use(express.json());
 app.use(express.static('public', { index: false }));
 app.use((req, res, next) => {
@@ -269,9 +280,15 @@ app.post('/api/shorten', verifyToken, async (req, res) => {
     return res.status(400).json({ error: 'URL is required' });
   }
 
-  // Validate URL
+  // Validate URL structure and block dangerous schemes.
+  // new URL() only checks syntactic correctness; it accepts javascript:, data:,
+  // vbscript:, and other schemes that are unsafe as redirect destinations.
+  // Enforce an explicit allowlist so only http and https links can be shortened.
   try {
-    new URL(url);
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return res.status(400).json({ error: 'Only http and https URLs are allowed' });
+    }
   } catch (e) {
     return res.status(400).json({ error: 'Invalid URL' });
   }
@@ -1310,8 +1327,8 @@ app.post('/api/track/share/:shortCode', async (req, res) => {
   res.json({ success: true, message: 'Shares tracked via UTM parameters' });
 });
 
-// Create GitHub Issue for Bug Report
-app.post('/api/bug-report', async (req, res) => {
+// Create GitHub Issue for Bug Report (requires authentication + strict rate limit)
+app.post('/api/bug-report', verifyToken, bugReportLimiter, async (req, res) => {
   try {
     const { title, description, steps, email, userId, userEmail } = req.body;
     
