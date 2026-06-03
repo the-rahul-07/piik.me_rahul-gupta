@@ -167,7 +167,7 @@ Leave a comment on the issue saying you'd like to work on it. The maintainer wil
 
 Create feature branches from `main` using the pattern `type/short-description`, for example:
 
-```
+```bash
 feat/custom-domains
 fix/firebase-key-error
 docs/faq-improvements
@@ -175,7 +175,7 @@ docs/faq-improvements
 
 Commit messages follow the same `type(scope): summary` format:
 
-```
+```bash
 feat(analytics): add geographic breakdown chart
 fix(auth): handle expired token gracefully
 docs(faq): add deployment and security sections
