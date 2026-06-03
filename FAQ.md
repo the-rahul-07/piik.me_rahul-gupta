@@ -10,6 +10,9 @@
 - [Setup & Installation](#setup--installation)
 - [Features](#features)
 - [Contributing](#contributing)
+- [Bugs & Security](#bugs--security)
+- [Deployment](#deployment)
+- [License](#license)
 - [Self-Hosting & Privacy](#self-hosting--privacy)
 - [Related Documentation](#related-documentation)
 
@@ -72,7 +75,7 @@ Your domain is probably not in Firebase's authorized list. Go to **Firebase Cons
 
 When you paste a private key into `.env`, the literal string must use `\n` to represent newlines — not actual line breaks. The value should look like:
 
-```
+```env
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----\n"
 ```
 
@@ -154,6 +157,115 @@ Yes, but please discuss significant new dependencies in your PR description or i
 
 ---
 
+**How do I claim an issue before working on it?**
+
+Leave a comment on the issue saying you'd like to work on it. The maintainer will assign it to you. Please don't open a PR for an issue that is already assigned to someone else — check the Assignees panel on the right-hand side of the issue first.
+
+---
+
+**What branch and commit naming conventions should I follow?**
+
+Create feature branches from `main` using the pattern `type/short-description`, for example:
+
+```
+feat/custom-domains
+fix/firebase-key-error
+docs/faq-improvements
+```
+
+Commit messages follow the same `type(scope): summary` format:
+
+```
+feat(analytics): add geographic breakdown chart
+fix(auth): handle expired token gracefully
+docs(faq): add deployment and security sections
+```
+
+Valid types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`.
+
+---
+
+## Bugs & Security
+
+**How do I report a bug?**
+
+Open a [GitHub Issue](https://github.com/xthxr/piik.me/issues/new/choose) using the **Bug Report** template. Include steps to reproduce, expected vs. actual behavior, your Node.js version, OS, and browser. Screenshots or console errors are very helpful.
+
+---
+
+**How do I report a security vulnerability?**
+
+**Do not open a public GitHub issue for security vulnerabilities.** Follow the responsible disclosure process described in [docs/SECURITY.md](https://github.com/xthxr/piik.me/blob/main/docs/SECURITY.md). This allows the maintainer to assess and patch the issue before any public disclosure.
+
+---
+
+**What happens after I report a vulnerability?**
+
+The maintainer will acknowledge your report, investigate the issue, and release a patch. You will be credited in the release notes unless you prefer to remain anonymous.
+
+---
+
+## Deployment
+
+**How do I deploy PIIK.ME to Vercel?**
+
+The repo ships with a `vercel.json` for zero-config deployment:
+
+```bash
+npm i -g vercel
+vercel
+```
+
+Add all environment variables from your `.env` file under **Vercel Dashboard → Project → Settings → Environment Variables**. Then add your Vercel production domain to **Firebase Console → Authentication → Settings → Authorized domains**.
+
+---
+
+**Can I deploy on platforms other than Vercel?**
+
+Yes — Railway, Render, Fly.io, or any VPS that supports Node.js all work. The `vercel.json` file is only needed for Vercel. Set the `PORT` and `BASE_URL` environment variables to match your hosting environment.
+
+---
+
+**Does PIIK.ME use Redis? Do I need to set it up?**
+
+PIIK.ME optionally uses [Upstash Redis](https://upstash.com/) as a caching layer to reduce Firestore reads on hot redirect paths. It is not required — the app falls back to Firestore directly if Redis is not configured. To enable it, add `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` to your `.env` file.
+
+---
+
+**What environment variables are required for production?**
+
+| Variable                   | Required | Description                                |
+| -------------------------- | -------- | ------------------------------------------ |
+| `PORT`                     | No       | Server port (default: `3000`)              |
+| `BASE_URL`                 | Yes      | Full production URL e.g. `https://piik.me` |
+| `FIREBASE_PROJECT_ID`      | Yes      | Firebase project ID                        |
+| `FIREBASE_CLIENT_EMAIL`    | Yes      | Service account client email               |
+| `FIREBASE_PRIVATE_KEY`     | Yes      | Service account private key                |
+| `UPSTASH_REDIS_REST_URL`   | No       | Redis cache URL (optional)                 |
+| `UPSTASH_REDIS_REST_TOKEN` | No       | Redis cache token (optional)               |
+
+---
+
+## License
+
+**What license does PIIK.ME use?**
+
+PIIK.ME is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See the [LICENSE](https://github.com/xthxr/piik.me/blob/main/LICENSE) file for the full text.
+
+---
+
+**What does GPL-3.0 mean for me?**
+
+You are free to use, modify, and distribute PIIK.ME. However, if you distribute a modified version — including as a hosted service — you must also make your source code available under the same GPL-3.0 license. You cannot incorporate PIIK.ME into proprietary closed-source software.
+
+---
+
+**Can I use PIIK.ME commercially?**
+
+You can self-host and use PIIK.ME for commercial purposes as long as you comply with GPL-3.0 terms. If you build a hosted product on top of PIIK.ME, your modifications must be open-sourced under GPL-3.0 as well.
+
+---
+
 ## Self-Hosting & Privacy
 
 **What data does PIIK.ME store?**
@@ -168,13 +280,15 @@ PIIK.ME itself does not sell or share data. However, it relies on Firebase (Goog
 
 ## Related Documentation
 
-| Document | Description |
-|---|---|
-| [CONTRIBUTING.md](https://github.com/xthxr/piik.me/blob/main/CONTRIBUTING.md) | How to contribute code, report bugs, and open PRs |
-| [DEVELOPMENT.md](./DEVELOPMENT.md) | Local setup, architecture, API reference, and coding standards |
-| [ROADMAP.md](./ROADMAP.md) | Planned features and the future direction of the project |
-| [docs/FIREBASE_SETUP.md](https://github.com/xthxr/piik.me/blob/main/docs/FIREBASE_SETUP.md) | Step-by-step guide to configuring Firebase for PIIK.ME |
+| Document                                                                                    | Description                                                    |
+| ------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| [CONTRIBUTING.md](https://github.com/xthxr/piik.me/blob/main/CONTRIBUTING.md)               | How to contribute code, report bugs, and open PRs              |
+| [DEVELOPMENT.md](./DEVELOPMENT.md)                                                          | Local setup, architecture, API reference, and coding standards |
+| [ROADMAP.md](./ROADMAP.md)                                                                  | Planned features and the future direction of the project       |
+| [docs/FIREBASE_SETUP.md](https://github.com/xthxr/piik.me/blob/main/docs/FIREBASE_SETUP.md) | Step-by-step guide to configuring Firebase for PIIK.ME         |
+| [docs/SECURITY.md](https://github.com/xthxr/piik.me/blob/main/docs/SECURITY.md)             | Responsible disclosure process for security vulnerabilities    |
+| [LICENSE](https://github.com/xthxr/piik.me/blob/main/LICENSE)                               | Full GPL-3.0 license text                                      |
 
 ---
 
-*Last updated: 2026 · PIIK.ME open-source project*
+_Last updated: 2026 · PIIK.ME open-source project_
